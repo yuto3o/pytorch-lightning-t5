@@ -128,7 +128,10 @@ class LightningT5Module(LightningModule):
                                       early_stopping=early_stopping,
                                       top_p=top_p,
                                       top_k=top_k,
-                                      num_return_sequences=num_return_sequences)
+                                      num_return_sequences=num_return_sequences,
+                                      output_scores=True,
+                                      return_dict_in_generate=True
+                                      )
 
         ans = self.tokenizer.batch_decode(
             outputs.sequences,
@@ -136,7 +139,7 @@ class LightningT5Module(LightningModule):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces)
 
         in_b, _ = inputs.input_ids.shape
-        group_ans = [ans[(i - 1) * num_return_sequences:i * num_return_sequences] for i in range(in_b)]
+        group_ans = [ans[i * num_return_sequences:(i + 1) * num_return_sequences] for i in range(in_b)]
 
         return group_ans
 
@@ -173,7 +176,7 @@ class LightningT5DataModuel(LightningDataModule):
         super(LightningT5DataModuel, self).__init__()
         self.save_hyperparameters(datamodule_args)
 
-        self.splits = splits
+        self.splits_raw = splits
         self.tokenizer = tokenizer
 
         self.splits_encode = None
@@ -199,8 +202,8 @@ class LightningT5DataModuel(LightningDataModule):
                 (l if l != self.tokenizer.pad_token_id else -100) for l in labels['input_ids']
             ]
             inputs['labels'] = labels['input_ids']
-            inputs = inputs.convert_to_tensors()
 
+        inputs = inputs.convert_to_tensors('pt')
         return inputs
 
     def prepare_data(self) -> None:
@@ -216,8 +219,8 @@ class LightningT5DataModuel(LightningDataModule):
             return {k: _tokenize(split[k]) for k in split}
 
         # summary
-        logger.info(pformat({k: len(self.splits[k]) for k in self.splits}))
-        self.splits_encode = tokenize(self.splits)
+        logger.info(pformat({k: len(self.splits_raw[k]) for k in self.splits_raw}))
+        self.splits_encode = tokenize(self.splits_raw)
 
     def collate_fn(self, batch):
 
